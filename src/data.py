@@ -3,7 +3,8 @@ Data loading, parsing, and feature extraction utilities
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from collections import Counter
 
 import pandas as pd
 
@@ -11,6 +12,17 @@ import pandas as pd
 # Standard 20 canonical amino acids
 AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
 AA_TO_IDX = {aa: idx for idx, aa in enumerate(AMINO_ACIDS)}
+
+CANONICAL_AA_SET = set(AMINO_ACIDS)
+# IUPAC-IUBMB extended / ambiguous amino acid codes
+NON_CANONICAL_IUPAC = {
+    "U": "Selenocysteine (Rare 21st AA)",
+    "O": "Pyrrolysine (Rare 22nd AA)",
+    "B": "Ambiguous Asx (Asp D or Asn N)",
+    "Z": "Ambiguous Glx (Glu E or Gln Q)",
+    "J": "Ambiguous Xle (Leu L or Ile I)",
+    "X": "Unknown / Unspecified AA",
+}
 
 
 def resolve_data_paths(data_dir: str | Path) -> Dict[str, Path]:
@@ -207,3 +219,70 @@ def parse_go_obo_summary(obo_path: str | Path) -> Dict[str, int]:
         "obsolete_terms": obsolete_terms,
         "is_a_edges": is_a_edges,
     }
+
+def inspect_non_canonical_amino_acids(
+    datasets: Dict[str, pd.DataFrame],
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Scan protein sequences across one or more splits to check for
+    noncanonical or invalid/corrupted amino acid characters.
+
+    Returns:
+        overview_df: High-level summary per dataset split (total sequences, affected sequences, invalid symbols).
+        residue_df : Detailed breakdown of each non-canonical character found, its IUPAC meaning,
+                     total occurrences, and number of affected proteins per split.
+    """
+    overview_rows = []
+    residue_rows = []
+
+    for split_name, df in datasets.items():
+        total_seqs = len(df)
+        total_residues = int(df["length"].sum()) if "length" in df.columns else 0
+        affected_seqs = 0
+        invalid_seqs = 0
+        char_occurrence: Counter = Counter()
+        char_seq_count: Counter = Counter()
+
+        for seq in df["sequence"]:
+            counts = Counter(seq)
+            non_can = [ch for ch in counts if ch not in CANONICAL_AA_SET]
+            if non_can:
+                affected_seqs += 1
+                if any(ch not in NON_CANONICAL_IUPAC for ch in non_can):
+                    invalid_seqs += 1
+                for ch in non_can:
+                    char_occurrence[ch] += counts[ch]
+                    char_seq_count[ch] += 1
+
+        overview_rows.append(
+            {
+                "Split": split_name,
+                "Total_Sequences": total_seqs,
+                "Sequences_with_NonCanonical_AA": affected_seqs,
+                "Affected_Sequence_Pct (%)": round(affected_seqs / max(total_seqs, 1) * 100.0, 4),
+                "Corrupted_or_Invalid_Char_Sequences": invalid_seqs,
+                "Total_NonCanonical_Residues": sum(char_occurrence.values()),
+                "Total_Residues": total_residues,
+            }
+        )
+
+        for ch in sorted(char_occurrence.keys()):
+            residue_rows.append(
+                {
+                    "Split": split_name,
+                    "Residue_Code": ch,
+                    "Category": "Valid IUPAC Extended/Ambiguous"
+                    if ch in NON_CANONICAL_IUPAC
+                    else "Invalid / Corrupted Character",
+                    "Biological_Meaning": NON_CANONICAL_IUPAC.get(ch, "Unrecognized Symbol"),
+                    "Total_Occurrences": char_occurrence[ch],
+                    "Affected_Proteins": char_seq_count[ch],
+                    "Affected_Proteins_Pct (%)": round(
+                        char_seq_count[ch] / max(total_seqs, 1) * 100.0, 4
+                    ),
+                }
+            )
+
+    overview_df = pd.DataFrame(overview_rows)
+    residue_df = pd.DataFrame(residue_rows)
+    return overview_df, residue_df
