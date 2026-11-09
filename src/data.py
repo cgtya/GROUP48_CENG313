@@ -2,11 +2,14 @@
 Data loading, parsing, and feature extraction utilities
 """
 
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from collections import Counter
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
+from scipy import sparse
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 # Standard 20 canonical amino acids
@@ -286,3 +289,138 @@ def inspect_non_canonical_amino_acids(
     overview_df = pd.DataFrame(overview_rows)
     residue_df = pd.DataFrame(residue_rows)
     return overview_df, residue_df
+
+
+def extract_aac_features(sequences: Iterable[str]) -> np.ndarray:
+    """
+    extract 22 dimensional amino acid composition + sequence length features
+    """
+    seq_list = list(sequences)
+    n = len(seq_list)
+    feats = np.zeros((n, 22), dtype=np.float32)
+
+    for i, seq in enumerate(seq_list):
+        length = max(len(seq), 1)
+        counts = Counter(seq)
+        canonical_total = 0
+        for aa, idx in AA_TO_IDX.items():
+            c = counts.get(aa, 0)
+            feats[i, idx] = c / length
+            canonical_total += c
+        feats[i, 20] = (length - canonical_total) / length
+        feats[i, 21] = np.log1p(length)
+
+    return feats
+
+
+class ProteinFeatureExtractor:
+    """
+    modular feature pipeline combining:
+    1. amino acid composition  + length features (22 dense dims)
+    2. character n-gram (k-mer) TF-IDF features (default: dipeptides/tripeptides)
+    3. optional top N organism taxon id one hot encoding
+    """
+
+    def __init__(
+        self,
+        ngram_range: Tuple[int, int] = (2, 3),
+        max_kmer_features: int = 1500,
+        top_taxa: int = 50,
+    ) -> None:
+        self.ngram_range = ngram_range
+        self.max_kmer_features = max_kmer_features
+        self.top_taxa = top_taxa
+        self.tfidf = TfidfVectorizer(
+            analyzer="char",
+            ngram_range=ngram_range,
+            max_features=max_kmer_features,
+            lowercase=False,
+            dtype=np.float32,
+        )
+        self.top_taxon_ids_: List[str] = []
+
+    def fit(
+        self,
+        sequences: Iterable[str],
+        taxon_ids: Optional[Iterable[str | int]] = None,
+    ) -> "ProteinFeatureExtractor":
+        seq_list = list(sequences)
+        self.tfidf.fit(seq_list)
+        if taxon_ids is not None and self.top_taxa > 0:
+            counts = Counter(str(t) for t in taxon_ids)
+            self.top_taxon_ids_ = [t for t, _ in counts.most_common(self.top_taxa)]
+        return self
+
+    def transform(
+        self,
+        sequences: Iterable[str],
+        taxon_ids: Optional[Iterable[str | int]] = None,
+    ) -> sparse.csr_matrix:
+        seq_list = list(sequences)
+        aac_dense = sparse.csr_matrix(extract_aac_features(seq_list))
+        kmer_sparse = self.tfidf.transform(seq_list)
+
+        blocks = [aac_dense, kmer_sparse]
+
+        if self.top_taxon_ids_ and taxon_ids is not None:
+            tax_list = [str(t) for t in taxon_ids]
+            tax_to_col = {t: idx for idx, t in enumerate(self.top_taxon_ids_)}
+            rows, cols = [], []
+            for r, t in enumerate(tax_list):
+                if t in tax_to_col:
+                    rows.append(r)
+                    cols.append(tax_to_col[t])
+            data = np.ones(len(rows), dtype=np.float32)
+            tax_sparse = sparse.csr_matrix(
+                (data, (rows, cols)),
+                shape=(len(seq_list), len(self.top_taxon_ids_)),
+            )
+            blocks.append(tax_sparse)
+
+        return sparse.hstack(blocks, format="csr", dtype=np.float32)
+
+    def fit_transform(
+        self,
+        sequences: Iterable[str],
+        taxon_ids: Optional[Iterable[str | int]] = None,
+    ) -> sparse.csr_matrix:
+        return self.fit(sequences, taxon_ids).transform(sequences, taxon_ids)
+
+
+def build_multilabel_targets(
+    protein_ids: Iterable[str],
+    terms_df: pd.DataFrame,
+    top_k: int = 250,
+) -> Tuple[np.ndarray, List[str], Dict[str, str]]:
+    """
+    build binary multi label target matrix Y of shape (n_proteins, top_k) for the
+    most frequent `top_k` GO terms in `terms_df`.
+
+    Returns:
+        Y: np.ndarray of shape (n_proteins, top_k) with {0, 1}
+        selected_terms: list of GO term strings ordered by frequency
+        term_to_aspect: dict mapping each selected GO term to its aspect (BPO/CCO/MFO)
+    """
+    protein_list = list(protein_ids)
+    prot_to_row = {pid: idx for idx, pid in enumerate(protein_list)}
+
+    term_counts = terms_df["term"].value_counts()
+    selected_terms = term_counts.head(top_k).index.tolist()
+    term_to_col = {term: idx for idx, term in enumerate(selected_terms)}
+
+    subset = terms_df[
+        terms_df["term"].isin(term_to_col) & terms_df["EntryID"].isin(prot_to_row)
+    ]
+
+    Y = np.zeros((len(protein_list), len(selected_terms)), dtype=np.float32)
+    rows = subset["EntryID"].map(prot_to_row).to_numpy()
+    cols = subset["term"].map(term_to_col).to_numpy()
+    Y[rows, cols] = 1.0
+
+    aspect_map = (
+        subset[["term", "aspect"]]
+        .drop_duplicates(subset=["term"])
+        .set_index("term")["aspect"]
+        .to_dict()
+    )
+    return Y, selected_terms, aspect_map
