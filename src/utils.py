@@ -1,12 +1,13 @@
 from collections import Counter
-from typing import Optional
+from typing import Dict, List, Optional
+
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
-
+from .data import AMINO_ACIDS
 
 def plot_aspect_and_top_terms(terms_df: pd.DataFrame, top_n: int = 20) -> plt.Figure:
     """
@@ -156,3 +157,149 @@ def plot_taxonomy_and_ia(
 
     plt.tight_layout()
     return fig
+
+
+def compute_fmax(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    weights: Optional[np.ndarray] = None,
+    thresholds: Optional[np.ndarray] = None,
+) -> Dict[str, float | np.ndarray]:
+    """
+    Compute the official CAFA maximum F measure (F_max) across decision thresholds.
+    Supports both unweighted and IA weighted precision/recall.
+
+    Args:
+        y_true: Binary ground truth matrix of shape (n_proteins, n_terms)
+        y_prob: Predicted probability matrix of shape (n_proteins, n_terms) in [0, 1]
+        weights: Optional 1D array of shape (n_terms,) with IA weights
+        thresholds: Optional 1D array of thresholds to sweep (default: 0.01 to 0.99)
+
+    Returns:
+        Dictionary with keys: 'fmax', 'best_threshold', 'precision', 'recall',
+        'thresholds', 'f_scores', 'precisions', 'recalls'.
+    """
+    if thresholds is None:
+        thresholds = np.linspace(0.01, 0.95, 48)
+
+    y_true_f = y_true.astype(np.float32)
+    if weights is not None:
+        w = np.asarray(weights, dtype=np.float32).reshape(1, -1)
+        w = np.maximum(w, 1e-6)
+    else:
+        w = np.ones((1, y_true.shape[1]), dtype=np.float32)
+
+    weighted_true = y_true_f * w
+    true_per_protein = weighted_true.sum(axis=1)
+    valid_rc_mask = true_per_protein > 0
+
+    f_scores: List[float] = []
+    precisions: List[float] = []
+    recalls: List[float] = []
+
+    best_f = -1.0
+    best_t = 0.5
+    best_pr = 0.0
+    best_rc = 0.0
+
+    for t in thresholds:
+        pred_bin = (y_prob >= t).astype(np.float32)
+        weighted_pred = pred_bin * w
+        tp_per_protein = (pred_bin * weighted_true).sum(axis=1)
+        pred_per_protein = weighted_pred.sum(axis=1)
+
+        # Precision averaged over proteins with at least one predicted term at threshold t
+        valid_pr_mask = pred_per_protein > 0
+        if np.any(valid_pr_mask):
+            pr = float(np.mean(tp_per_protein[valid_pr_mask] / pred_per_protein[valid_pr_mask]))
+        else:
+            pr = 0.0
+
+        # Recall averaged over proteins with at least one ground-truth term
+        if np.any(valid_rc_mask):
+            rc = float(np.mean(tp_per_protein[valid_rc_mask] / true_per_protein[valid_rc_mask]))
+        else:
+            rc = 0.0
+
+        f = (2.0 * pr * rc) / (pr + rc) if (pr + rc) > 0 else 0.0
+        f_scores.append(f)
+        precisions.append(pr)
+        recalls.append(rc)
+
+        if f > best_f:
+            best_f = f
+            best_t = float(t)
+            best_pr = pr
+            best_rc = rc
+
+    return {
+        "fmax": float(best_f),
+        "best_threshold": best_t,
+        "precision": best_pr,
+        "recall": best_rc,
+        "thresholds": thresholds,
+        "f_scores": np.array(f_scores),
+        "precisions": np.array(precisions),
+        "recalls": np.array(recalls),
+    }
+
+
+def compute_ontology_fmax(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    selected_terms: List[str],
+    term_to_aspect: Dict[str, str],
+    ia_map: Optional[Dict[str, float]] = None,
+) -> pd.DataFrame:
+    """
+    Evaluate F_max and IA weighted F_max separately for each Gene Ontology aspect
+    as well as their macro average (official CAFA metric).
+    """
+    aspects = sorted(set(term_to_aspect.values()))
+    rows = []
+
+    for asp in aspects:
+        idx = [i for i, term in enumerate(selected_terms) if term_to_aspect.get(term) == asp]
+        if not idx:
+            continue
+        sub_true = y_true[:, idx]
+        sub_prob = y_prob[:, idx]
+        res_unw = compute_fmax(sub_true, sub_prob, weights=None)
+
+        if ia_map is not None:
+            w = np.array([ia_map.get(selected_terms[i], 1.0) for i in idx], dtype=np.float32)
+            res_ia = compute_fmax(sub_true, sub_prob, weights=w)
+            ia_fmax = res_ia["fmax"]
+            ia_thresh = res_ia["best_threshold"]
+        else:
+            ia_fmax = res_unw["fmax"]
+            ia_thresh = res_unw["best_threshold"]
+
+        rows.append(
+            {
+                "Aspect": asp,
+                "Num_Terms": len(idx),
+                "Fmax_Unweighted": res_unw["fmax"],
+                "Best_Threshold": res_unw["best_threshold"],
+                "Precision": res_unw["precision"],
+                "Recall": res_unw["recall"],
+                "Fmax_IA_Weighted": ia_fmax,
+                "IA_Best_Threshold": ia_thresh,
+            }
+        )
+
+    df_res = pd.DataFrame(rows)
+    if not df_res.empty:
+        mean_row = {
+            "Aspect": "MEAN (CAFA Official Style)",
+            "Num_Terms": int(df_res["Num_Terms"].sum()),
+            "Fmax_Unweighted": float(df_res["Fmax_Unweighted"].mean()),
+            "Best_Threshold": float(df_res["Best_Threshold"].mean()),
+            "Precision": float(df_res["Precision"].mean()),
+            "Recall": float(df_res["Recall"].mean()),
+            "Fmax_IA_Weighted": float(df_res["Fmax_IA_Weighted"].mean()),
+            "IA_Best_Threshold": float(df_res["IA_Best_Threshold"].mean()),
+        }
+        df_res = pd.concat([df_res, pd.DataFrame([mean_row])], ignore_index=True)
+
+    return df_res

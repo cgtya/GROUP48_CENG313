@@ -1,0 +1,39 @@
+"""
+Baseline models
+"""
+
+from typing import Optional
+
+import numpy as np
+from scipy import sparse
+
+try:
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, TensorDataset
+
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+
+class NaiveFrequencyBaseline:
+    """
+    Model 0 Naive Prior Probability Baseline.
+    Assigns the empirical frequency of each GO term in the training set to every protein.
+    Serves as the lower bound benchmark required to validate whether sequence features add signal.
+    """
+
+    def __init__(self) -> None:
+        self.priors_: Optional[np.ndarray] = None
+
+    def fit(self, X: Optional[np.ndarray | sparse.spmatrix], Y: np.ndarray) -> "NaiveFrequencyBaseline":
+        self.priors_ = np.mean(Y, axis=0).astype(np.float32)
+        return self
+
+    def predict_proba(self, X: np.ndarray | sparse.spmatrix) -> np.ndarray:
+        if self.priors_ is None:
+            raise RuntimeError("NaiveFrequencyBaseline must be fitted before calling predict_proba.")
+        n_samples = X.shape[0]
+        return np.tile(self.priors_, (n_samples, 1))
+
