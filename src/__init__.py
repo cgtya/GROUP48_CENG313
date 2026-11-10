@@ -14,7 +14,7 @@ from .data import (
     resolve_data_paths,
 )
 
-from .models import NaiveFrequencyBaseline, RidgeMultilabelBaseline
+from .models import NaiveFrequencyBaseline, RidgeMultilabelBaseline, TorchMLPBaseline
 
 from .utils import (
     plot_aspect_and_top_terms,
@@ -41,5 +41,6 @@ __all__ = [
     "plot_sequence_length_and_aa_composition",
     "plot_taxonomy_and_ia",
     "NaiveFrequencyBaseline",
-    "RidgeMultilabelBaseline"
+    "RidgeMultilabelBaseline",
+    "TorchMLPBaseline"
 ]
