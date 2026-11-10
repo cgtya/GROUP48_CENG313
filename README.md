@@ -56,29 +56,28 @@ Predictions are evaluated using the weighted maximum F-measure ($F_{\max}$) comp
 3. **Baseline Models (`src/models.py`):**
    - **Baseline 0 (`NaiveFrequencyBaseline`):** Lower-bound reference model assigning empirical training prior probabilities of the top-$K$ GO terms to every protein.
    - **Baseline 1 (`RidgeMultilabelBaseline`):** Fast L2-regularized multi-output linear classifier trained on AAC + $k$-mer TF-IDF + Taxonomy features.
-   - **Baseline 2 (`TorchMLPBaseline`):** GPU/ROCm-accelerated 3-layer Multi-Layer Perceptron (`Linear -> BatchNorm -> GELU -> Dropout`) trained with `BCEWithLogitsLoss`.
+   - **Baseline 2 (`TorchMLPBaseline`):** GPU accelerated 3-layer Multi-Layer Perceptron (`Linear -> BatchNorm -> GELU -> Dropout`) trained with `BCEWithLogitsLoss`.
 
 ---
 
 ## 5. Validation Results Summary
 
-> *(TODO : Update the numbers below after running `assignment1_eda_baseline.ipynb` on the full CAFA 6 dataset)*
-
 | Model | Features Used | Mean Validation $F_{\max}$ (Unweighted) | Mean Validation $F_{\max}$ (IA-Weighted) | Optimal Threshold $t^*$ |
 | :--- | :--- | :---: | :---: | :---: |
-| **0. Naive Frequency Prior** | None (Empirical Priors) | `TBD` | `TBD` | `TBD` |
-| **1. Ridge Linear Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | `TBD` | `TBD` | `TBD` |
-| **2. PyTorch MLP Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | `TBD` | `TBD` | `TBD` |
+| **0. Naive Frequency Prior** | None (Empirical Priors) | 0.242246 | 0.238117 | 0.05 |
+| **1. Ridge Linear Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | 0.336527 | 0.328197 | 0.17 |
+| **2. PyTorch MLP Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | 0.369472	 | 0.360862	 | 0.23 |
 
 ---
 
 ## 6. How to Run the Notebooks
 
-### Local Execution (Linux / ROCm or CUDA GPU / CPU)
+### Local Execution
 1. Clone the repository and install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
+   Get the compatible Pytorch for your system at [here](https://pytorch.org/get-started/locally/) and install
 2. Download the competition dataset via Kaggle CLI (or extract the zip into `data/cafa-6-protein-function-prediction/`):
    ```bash
    kaggle competitions download -c cafa-6-protein-function-prediction -p data/cafa-6-protein-function-prediction
