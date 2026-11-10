@@ -14,6 +14,8 @@ from .data import (
     resolve_data_paths,
 )
 
+from .models import NaiveFrequencyBaseline, RidgeMultilabelBaseline
+
 from .utils import (
     plot_aspect_and_top_terms,
     plot_long_tail_and_labels_per_protein,
@@ -38,4 +40,6 @@ __all__ = [
     "plot_long_tail_and_labels_per_protein",
     "plot_sequence_length_and_aa_composition",
     "plot_taxonomy_and_ia",
+    "NaiveFrequencyBaseline",
+    "RidgeMultilabelBaseline"
 ]
