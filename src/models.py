@@ -48,16 +48,18 @@ class RidgeMultilabelBaseline:
 
     def __init__(self, alpha: float = 10.0) -> None:
         self.alpha = alpha
-        self.model = Ridge(alpha=alpha, solver="lsqr", max_iter=500, random_state=42)
+        self.model = Ridge(alpha=alpha, solver="cholesky", random_state=42)
         self.priors_: Optional[np.ndarray] = None
 
     def fit(self, X: np.ndarray | sparse.spmatrix, Y: np.ndarray) -> "RidgeMultilabelBaseline":
         self.priors_ = np.mean(Y, axis=0).astype(np.float32)
-        self.model.fit(X, Y)
+        X_dense = X.toarray().astype(np.float32) if sparse.issparse(X) else np.asarray(X, dtype=np.float32)
+        self.model.fit(X_dense, Y)
         return self
 
     def predict_proba(self, X: np.ndarray | sparse.spmatrix) -> np.ndarray:
-        raw_scores = self.model.predict(X).astype(np.float32)
+        X_dense = X.toarray().astype(np.float32) if sparse.issparse(X) else np.asarray(X, dtype=np.float32)
+        raw_scores = self.model.predict(X_dense).astype(np.float32)
         return np.clip(raw_scores, 0.0, 1.0)
 
 
