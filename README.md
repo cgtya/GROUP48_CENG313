@@ -10,7 +10,7 @@
 | Member Name | Student ID | GitHub Username |
 | :--- | :--- | :--- |
 | `Çağatay Aslan` | `23118080003` | `@cgtya` |
-| `Mehmet Samet Sümer` | `[Öğrenci No 2]` | `[@github_user_2]` |
+| `Mehmet Samet Sümer` | `24118080005` | `@Keynekei` |
 
 ---
 
@@ -62,11 +62,15 @@ Predictions are evaluated using the weighted maximum F-measure ($F_{\max}$) comp
 
 ## 5. Validation Results Summary
 
+> **Evaluation Status:** *Competition closed - evaluated on a held-out split.* (Late submissions are not accepted and test ground-truth labels are withheld; scores below are measured on a 20% held-out split of the training set, `16,481` proteins, `random_state=42`, across the Top-300 GO terms.)
+
 | Model | Features Used | Mean Validation $F_{\max}$ (Unweighted) | Mean Validation $F_{\max}$ (IA-Weighted) | Optimal Threshold $t^*$ |
 | :--- | :--- | :---: | :---: | :---: |
 | **0. Naive Frequency Prior** | None (Empirical Priors) | 0.242246 | 0.238117 | 0.05 |
 | **1. Ridge Linear Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | 0.336527 | 0.328197 | 0.17 |
-| **2. PyTorch MLP Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | 0.369472	 | 0.360862	 | 0.23 |
+| **2. PyTorch MLP Baseline** | AAC + (2,3)-mer TF-IDF + Taxon | 0.369472 | 0.360862 | 0.23 |
+
+- **Leaderboard & Public Notebook Comparison:** The 1st-place leaderboard score on CAFA 6 is `0.52430` (ZhuLab GOAlpha), while public baseline notebooks typically range between `~0.16` and `~0.37`. Our best Assignment 1 baseline (`0.360862` IA-weighted $F_{\max}$ on the Top-300 term subset) is `0.163438` below the 1st-place score.
 
 ---
 

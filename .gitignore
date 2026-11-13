@@ -223,3 +223,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Dataset and generated submission/output artifacts (CENG313 rule: exclude data/)
+data/
+outputs/
