@@ -291,6 +291,101 @@ def inspect_non_canonical_amino_acids(
     return overview_df, residue_df
 
 
+def summarize_tables_overview(
+    tables: Dict[str, Optional[pd.DataFrame]],
+) -> pd.DataFrame:
+    """
+    Summarize shape, column data types, missing values, and exact row duplicates
+    for each loaded dataset DataFrame.
+    """
+    rows = []
+    for name, df in tables.items():
+        if df is None:
+            continue
+        dtype_str = ", ".join(f"{col}: {dtype}" for col, dtype in df.dtypes.items())
+        rows.append(
+            {
+                "Table": name,
+                "Rows": int(df.shape[0]),
+                "Columns": int(df.shape[1]),
+                "Dtypes": dtype_str,
+                "Missing_Values": int(df.isna().sum().sum()),
+                "Exact_Row_Duplicates": int(df.duplicated().sum()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def inspect_dataset_duplicates(
+    train_seq_df: pd.DataFrame,
+    test_seq_df: pd.DataFrame,
+    terms_df: pd.DataFrame,
+    tax_df: Optional[pd.DataFrame] = None,
+    ia_df: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
+    """
+    Check key-level duplicates (IDs, sequences, annotation pairs) and train/test overlaps.
+    """
+    records = [
+        {
+            "Check": "train_seq_df duplicate EntryID",
+            "Count": int(train_seq_df["EntryID"].duplicated().sum()),
+            "Total_Rows": int(len(train_seq_df)),
+        },
+        {
+            "Check": "train_seq_df duplicate sequence",
+            "Count": int(train_seq_df["sequence"].duplicated().sum()),
+            "Total_Rows": int(len(train_seq_df)),
+        },
+        {
+            "Check": "test_seq_df duplicate EntryID",
+            "Count": int(test_seq_df["EntryID"].duplicated().sum()),
+            "Total_Rows": int(len(test_seq_df)),
+        },
+        {
+            "Check": "test_seq_df duplicate sequence",
+            "Count": int(test_seq_df["sequence"].duplicated().sum()),
+            "Total_Rows": int(len(test_seq_df)),
+        },
+        {
+            "Check": "terms_df duplicate (EntryID, term) pairs",
+            "Count": int(terms_df.duplicated(subset=["EntryID", "term"]).sum()),
+            "Total_Rows": int(len(terms_df)),
+        },
+        {
+            "Check": "Train vs Test shared EntryIDs",
+            "Count": int(len(set(train_seq_df["EntryID"]) & set(test_seq_df["EntryID"]))),
+            "Total_Rows": int(len(train_seq_df)),
+        },
+        {
+            "Check": "Train vs Test shared exact sequences",
+            "Count": int(len(set(train_seq_df["sequence"]) & set(test_seq_df["sequence"]))),
+            "Total_Rows": int(len(train_seq_df)),
+        },
+    ]
+
+    if tax_df is not None:
+        records.append(
+            {
+                "Check": "tax_df duplicate EntryID",
+                "Count": int(tax_df["EntryID"].duplicated().sum()),
+                "Total_Rows": int(len(tax_df)),
+            }
+        )
+    if ia_df is not None:
+        records.append(
+            {
+                "Check": "ia_df duplicate term",
+                "Count": int(ia_df["term"].duplicated().sum()),
+                "Total_Rows": int(len(ia_df)),
+            }
+        )
+
+    out_df = pd.DataFrame(records)
+    out_df["Share_Pct (%)"] = (out_df["Count"] / out_df["Total_Rows"].clip(lower=1) * 100.0).round(2)
+    return out_df
+
+
 def extract_aac_features(sequences: Iterable[str]) -> np.ndarray:
     """
     extract 22 dimensional amino acid composition + sequence length features

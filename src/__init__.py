@@ -4,6 +4,7 @@ from .data import (
     ProteinFeatureExtractor,
     build_multilabel_targets,
     extract_aac_features,
+    inspect_dataset_duplicates,
     inspect_non_canonical_amino_acids,
     load_ia_weights,
     load_taxonomy,
@@ -12,6 +13,7 @@ from .data import (
     parse_fasta,
     parse_go_obo_summary,
     resolve_data_paths,
+    summarize_tables_overview,
 )
 
 from .models import NaiveFrequencyBaseline, RidgeMultilabelBaseline, TorchMLPBaseline
@@ -28,6 +30,7 @@ __all__ = [
     "ProteinFeatureExtractor",
     "build_multilabel_targets",
     "extract_aac_features",
+    "inspect_dataset_duplicates",
     "inspect_non_canonical_amino_acids",
     "load_ia_weights",
     "load_taxonomy",
@@ -36,6 +39,7 @@ __all__ = [
     "parse_fasta",
     "parse_go_obo_summary",
     "resolve_data_paths",
+    "summarize_tables_overview",
     "plot_aspect_and_top_terms",
     "plot_long_tail_and_labels_per_protein",
     "plot_sequence_length_and_aa_composition",
