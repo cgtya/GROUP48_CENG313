@@ -37,7 +37,7 @@ Predictions are evaluated using the weighted maximum F-measure ($F_{\max}$) comp
 | `Train/go-basic.obo` | Gene Ontology graph structure defining `is_a` and `part_of` parent-child hierarchy relationships. |
 | `IA.tsv` | Information Accretion ($IA$) specificity weights for each GO term. |
 | `Test/testsuperset.fasta` | Target protein sequences for which GO term probabilities must be predicted. |
-| `Test/testsuperset-taxon-list.tsv` | NCBI Taxonomy IDs for the test set proteins. |
+| `Test/testsuperset-taxon-list.tsv` | Reference list of target organism NCBI Taxonomy IDs and species names. |
 
 ---
 

@@ -2,7 +2,7 @@
 Baseline models
 """
 
-from typing import Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 from scipy import sparse
